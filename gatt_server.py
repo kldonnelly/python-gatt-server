@@ -17,7 +17,9 @@ from random import randint
 
 import exceptions
 import adapters
+import logging
 
+import time
 BLUEZ_SERVICE_NAME = 'org.bluez'
 LE_ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
 DBUS_OM_IFACE = 'org.freedesktop.DBus.ObjectManager'
@@ -41,9 +43,10 @@ class Application(dbus.service.Object):
         self.path = '/'
         self.services = []
         dbus.service.Object.__init__(self, bus, self.path)
-        self.add_service(HeartRateService(bus, 0))
-        self.add_service(BatteryService(bus, 1))
-        self.add_service(TestService(bus, 2))
+        #self.add_service(HeartRateService(bus, 0))
+        #self.add_service(BatteryService(bus, 1))
+        #self.add_service(TestService(bus, 2))
+        self.add_service(CurrentTimeService(bus,0))
 
     def get_path(self):
         return dbus.ObjectPath(self.path)
@@ -254,6 +257,7 @@ class HeartRateService(Service):
         self.add_characteristic(HeartRateMeasurementChrc(bus, 0, self))
         self.add_characteristic(BodySensorLocationChrc(bus, 1, self))
         self.add_characteristic(HeartRateControlPointChrc(bus, 2, self))
+        
         self.energy_expended = 0
 
 
@@ -354,6 +358,83 @@ class HeartRateControlPointChrc(Characteristic):
         print('Energy Expended field reset!')
         self.service.energy_expended = 0
 
+
+class CurrentTimeCharacteristic(Characteristic):
+    """
+    Fake Battery Level characteristic. The battery level is drained by 2 points
+    every 5 seconds.
+
+    """
+    CURRENT_TIME_UUID = '2a2B'
+
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(
+                self, bus, index,
+                self.CURRENT_TIME_UUID,
+                ['read', 'notify'],
+                service)
+        self.notifying = False
+        logger = logging.getLogger('')
+        logger.setLevel(logging.INFO)
+        GObject.timeout_add(5000, self.notify_time)
+
+    def current_time_bytes(self):
+        dt = time.localtime()
+        year = dt.tm_year.to_bytes(2, 'little')
+        value = list([dbus.Byte(b) for b in year])
+        value.append(dbus.Byte(dt.tm_mon))
+        value.append(dbus.Byte(dt.tm_mday))
+        value.append(dbus.Byte(dt.tm_hour))
+        value.append(dbus.Byte(dt.tm_min))
+        value.append(dbus.Byte(dt.tm_sec))
+        value.append(dbus.Byte(dt.tm_wday))
+        value.append(dbus.Byte(0))
+        value.append(dbus.Byte(1))
+        return value
+
+    def notify_current_time(self):
+        if not self.notifying:
+            return
+        self.PropertiesChanged(
+                GATT_CHRC_IFACE,
+                {'Value': self.current_time_bytes()}, [])
+
+    def notify_time(self):
+        if not self.notifying:
+            return True
+        logging.info('Notifying current local time')
+        self.notify_current_time()
+        return True
+
+    def ReadValue(self, options):
+        value = self.current_time_bytes()
+        logging.info("Supplying time")
+        return value
+
+    def StartNotify(self):
+        if self.notifying:
+            logging.warning('Already notifying, nothing to do')
+            return
+        self.notifying = True
+        self.notify_current_time()
+
+    def StopNotify(self):
+        if not self.notifying:
+            logging.warning('Not notifying, nothing to do')
+            return
+
+        self.notifying = False
+      
+class CurrentTimeService(Service):
+    """
+    Fake Battery service that emulates a draining battery.
+
+    """
+    CURRENT_TIME_UUID = '1805'
+
+    def __init__(self, bus, index):
+        Service.__init__(self, bus, index, self.CURRENT_TIME_UUID, True)
+        self.add_characteristic(CurrentTimeCharacteristic(bus, 0, self))
 
 class BatteryService(Service):
     """
