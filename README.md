@@ -60,3 +60,8 @@ You can use a smartphone as a GATT client. I used the [GATT-IP](http://www.gatt-
 
 ## License
 The code in this repository is based on code taken from the [BlueZ](http://www.bluez.org/) project. It is licensed under GPL 2.0
+
+##
+gatt-cts.service
+/etc/systemd/system/gatt-cts.service
+

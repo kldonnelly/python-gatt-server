@@ -1,0 +1,14 @@
+[Unit]
+Description=CurrentTime Service
+After=bluetooth.target
+Requires=bluetooth.target
+
+[Service]
+Type=idle
+ExecStart=/usr/bin/python3 /home/kevin/python/python-gatt-server/gatt_server_example.py
+WorkingDirectory=/home/kevin/python/python-gatt-server
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
